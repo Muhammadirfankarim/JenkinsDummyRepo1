@@ -15,15 +15,17 @@ pipeline {
             steps {
                 echo 'Setting up environment...'
                 
-                // Jalankan Docker untuk instalasi dependensi
-                bat '''
-                    docker run --rm -v "%CD%:/app" -w /app python:3.10 pip install -r requirements.txt
-                '''
+                // Periksa Docker
+                bat 'docker --version'
                 
-                // Periksa instalasi
+                // Periksa struktur direktori
+                bat 'dir'
+                
+                // Buat direktori yang diperlukan jika belum ada
                 bat '''
-                    echo Instalasi paket berhasil
-                    dir
+                    if not exist models mkdir models
+                    if not exist reports mkdir reports
+                    if not exist data mkdir data
                 '''
             }
         }
@@ -36,7 +38,7 @@ pipeline {
             steps {
                 echo 'Running unit tests...'
                 bat '''
-                    docker run --rm -v "%CD%:/app" -w /app python:3.10 python -m pytest test_pipeline.py -v
+                    docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python -m pytest test_pipeline.py -v"
                 '''
             }
             post {
@@ -55,7 +57,7 @@ pipeline {
             steps {
                 echo 'Training ML model...'
                 bat '''
-                    docker run --rm -v "%CD%:/app" -w /app python:3.10 python ml_pipeline.py
+                    docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python ml_pipeline.py"
                 '''
             }
             post {
@@ -74,7 +76,7 @@ pipeline {
             steps {
                 echo 'Running model monitoring...'
                 bat '''
-                    docker run --rm -v "%CD%:/app" -w /app python:3.10 python model_monitoring.py
+                    docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python model_monitoring.py"
                 '''
             }
             post {
