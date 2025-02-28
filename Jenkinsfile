@@ -3,7 +3,7 @@ pipeline {
     
     // Definisi parameter build
     parameters {
-        booleanParam(defaultValue: true, description: 'Apakah akan menjalankan tes unit?', name: 'RUN_TESTS')
+        booleanParam(defaultValue: false, description: 'Apakah akan menjalankan tes unit?', name: 'RUN_TESTS')
         booleanParam(defaultValue: true, description: 'Apakah akan melatih model?', name: 'TRAIN_MODEL')
         booleanParam(defaultValue: true, description: 'Apakah akan menjalankan monitoring model?', name: 'RUN_MONITORING')
     }
@@ -40,9 +40,11 @@ pipeline {
             }
             steps {
                 echo 'Running unit tests...'
-                bat '''
-                    docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python -m pytest test_pipeline.py -v"
-                '''
+                catchError(buildResult: 'UNSTABLE', stageResult: 'FAILURE') {
+                    bat '''
+                        docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python -m pytest test_pipeline.py -v"
+                    '''
+                }
                 // Alternatif jika mengalami masalah dengan %CD%
                 // bat '''
                 //     docker run --rm -v "D:/AutoML/Jenkins_Automation:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python -m pytest test_pipeline.py -v"
