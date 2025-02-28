@@ -1,10 +1,5 @@
 pipeline {
-    agent {
-        docker {
-            image 'python:3.10' // Gunakan image Python resmi
-            args '-v ${WORKSPACE}:/app' // Mount workspace ke direktori /app di container
-        }
-    }
+    agent any
     
     // Definisi parameter build
     parameters {
@@ -20,13 +15,16 @@ pipeline {
             steps {
                 echo 'Setting up environment...'
                 
-                // Periksa versi Python dan pip
-                sh 'python --version'
-                sh 'pip --version'
+                // Jalankan Docker untuk instalasi dependensi
+                bat '''
+                    docker run --rm -v "%CD%:/app" -w /app python:3.10 pip install -r requirements.txt
+                '''
                 
-                // Install dependensi
-                sh 'pip install --upgrade pip'
-                sh 'pip install -r requirements.txt'
+                // Periksa instalasi
+                bat '''
+                    echo Instalasi paket berhasil
+                    dir
+                '''
             }
         }
         
@@ -37,7 +35,9 @@ pipeline {
             }
             steps {
                 echo 'Running unit tests...'
-                sh 'python -m pytest test_pipeline.py -v'
+                bat '''
+                    docker run --rm -v "%CD%:/app" -w /app python:3.10 python -m pytest test_pipeline.py -v
+                '''
             }
             post {
                 always {
@@ -54,7 +54,9 @@ pipeline {
             }
             steps {
                 echo 'Training ML model...'
-                sh 'python ml_pipeline.py'
+                bat '''
+                    docker run --rm -v "%CD%:/app" -w /app python:3.10 python ml_pipeline.py
+                '''
             }
             post {
                 success {
@@ -71,7 +73,9 @@ pipeline {
             }
             steps {
                 echo 'Running model monitoring...'
-                sh 'python model_monitoring.py'
+                bat '''
+                    docker run --rm -v "%CD%:/app" -w /app python:3.10 python model_monitoring.py
+                '''
             }
             post {
                 success {
