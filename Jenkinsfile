@@ -1,18 +1,16 @@
 pipeline {
-    agent any
+    agent {
+        docker {
+            image 'python:3.10' // Gunakan image Python resmi
+            args '-v ${WORKSPACE}:/app' // Mount workspace ke direktori /app di container
+        }
+    }
     
     // Definisi parameter build
     parameters {
         booleanParam(defaultValue: true, description: 'Apakah akan menjalankan tes unit?', name: 'RUN_TESTS')
         booleanParam(defaultValue: true, description: 'Apakah akan melatih model?', name: 'TRAIN_MODEL')
         booleanParam(defaultValue: true, description: 'Apakah akan menjalankan monitoring model?', name: 'RUN_MONITORING')
-    }
-    
-    // Definisi environment
-    environment {
-        // Gunakan path lengkap ke Python jika diperlukan
-        PYTHON_PATH = "C:\\Python310\\python.exe"  // Sesuaikan dengan lokasi Python di server Jenkins
-        VIRTUAL_ENV = "venv"    // Nama virtual environment
     }
     
     // Definisi stages pipeline
@@ -22,15 +20,13 @@ pipeline {
             steps {
                 echo 'Setting up environment...'
                 
-                // Periksa apakah Python tersedia
-                bat "where python || echo Python tidak ditemukan di PATH"
+                // Periksa versi Python dan pip
+                sh 'python --version'
+                sh 'pip --version'
                 
-                // Coba buat direktori untuk virtual environment
-                bat "mkdir -p %VIRTUAL_ENV% || echo Direktori sudah ada"
-                
-                // Install pip dan dependensi tanpa virtual environment
-                bat "pip install --upgrade pip || echo Gagal upgrade pip"
-                bat "pip install -r requirements.txt || echo Gagal install requirements"
+                // Install dependensi
+                sh 'pip install --upgrade pip'
+                sh 'pip install -r requirements.txt'
             }
         }
         
@@ -41,7 +37,7 @@ pipeline {
             }
             steps {
                 echo 'Running unit tests...'
-                bat "python -m pytest test_pipeline.py -v || echo Gagal menjalankan test"
+                sh 'python -m pytest test_pipeline.py -v'
             }
             post {
                 always {
@@ -58,7 +54,7 @@ pipeline {
             }
             steps {
                 echo 'Training ML model...'
-                bat "python ml_pipeline.py || echo Gagal melatih model"
+                sh 'python ml_pipeline.py'
             }
             post {
                 success {
@@ -75,7 +71,7 @@ pipeline {
             }
             steps {
                 echo 'Running model monitoring...'
-                bat "python model_monitoring.py || echo Gagal menjalankan monitoring"
+                sh 'python model_monitoring.py'
             }
             post {
                 success {
