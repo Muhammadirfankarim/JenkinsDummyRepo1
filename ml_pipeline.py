@@ -134,9 +134,24 @@ def preprocess_data(df, test_size=0.2, random_state=42):
         if df.empty:
             raise ValueError("DataFrame kosong")
         
+        # Identifikasi kolom target (y atau target)
+        target_col = 'y'
+        if target_col not in df.columns and 'target' in df.columns:
+            target_col = 'target'
+            logger.info(f"Menggunakan kolom '{target_col}' sebagai target")
+        
+        if target_col not in df.columns:
+            raise ValueError(f"Kolom target '{target_col}' tidak ditemukan dalam dataset. Kolom yang tersedia: {df.columns.tolist()}")
+        
         # Pisahkan fitur dan target
-        X = df.drop('y', axis=1)  # Asumsikan target adalah kolom 'y'
-        y = df['y'].map({'yes': 1, 'no': 0})  # Konversi target ke numerik
+        X = df.drop(target_col, axis=1)
+        
+        # Konversi target ke numerik jika perlu
+        y = df[target_col]
+        if target_col == 'y' and y.dtype == 'object':
+            # Jika target adalah 'y' dan berisi string, konversi yes/no ke 1/0
+            y = y.map({'yes': 1, 'no': 0})
+            logger.info("Mengonversi nilai 'yes'/'no' pada kolom target ke 1/0")
         
         logger.info(f"Jumlah fitur: {X.shape[1]}")
         logger.info(f"Distribusi target: {y.value_counts().to_dict()}")
@@ -149,11 +164,16 @@ def preprocess_data(df, test_size=0.2, random_state=42):
         logger.info(f"Kolom kategorikal: {categorical_cols}")
         
         # Buat preprocessor menggunakan ColumnTransformer
+        transformers = []
+        
+        if numerical_cols:
+            transformers.append(('num', StandardScaler(), numerical_cols))
+            
+        if categorical_cols:
+            transformers.append(('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols))
+        
         preprocessor = ColumnTransformer(
-            transformers=[
-                ('num', StandardScaler(), numerical_cols),
-                ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
-            ],
+            transformers=transformers,
             remainder='passthrough'  # Sisa kolom akan dilewatkan apa adanya
         )
         
@@ -171,6 +191,9 @@ def preprocess_data(df, test_size=0.2, random_state=42):
         if not os.path.exists('models'):
             os.makedirs('models')
         joblib.dump(preprocessor, 'models/preprocessor.pkl')
+        
+        # Simpan scaler untuk kompatibilitas backward
+        joblib.dump(preprocessor, 'models/scaler.pkl')
         
         # Log informasi
         logger.info(f"Ukuran X_train: {X_train_processed.shape}")
@@ -302,7 +325,7 @@ def evaluate_model(model, X_test, y_test):
         raise
 
 # Fungsi utama untuk menjalankan pipeline
-def run_pipeline(data_path='data/bank.csv', model_type='random_forest'):
+def run_pipeline(data_path='data/test_data.csv', model_type='random_forest'):
     """
     Menjalankan seluruh ML pipeline, dari load data hingga evaluasi model
     """

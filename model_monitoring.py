@@ -276,9 +276,14 @@ def monitor_data_drift(new_data_path, reference_data_path='data/reference_data.c
             if abs(std_diff_pct) > 20:
                 logger.warning(f"Perubahan signifikan pada std {col}: {std_diff_pct:.2f}%")
         
+        # Identifikasi kolom target
+        target_col = 'y'
+        if target_col not in reference_data.columns and 'target' in reference_data.columns:
+            target_col = 'target'
+            
         # Hitung distribusi untuk kolom kategorikal
         for col in reference_data.select_dtypes(include=['object', 'category']).columns:
-            if col == 'y':  # Lewati kolom target
+            if col == target_col:  # Lewati kolom target
                 continue
                 
             ref_dist = reference_data[col].value_counts(normalize=True).to_dict()
@@ -353,13 +358,25 @@ def monitor_model_performance(data_path, model_path='models/model.pkl', preproce
         # Load data
         data = pd.read_csv(data_path)
         
-        # Pisahkan fitur dan target
-        if 'y' not in data.columns:
-            logger.error("Kolom target 'y' tidak ditemukan")
+        # Identifikasi kolom target
+        target_col = 'y'
+        if target_col not in data.columns and 'target' in data.columns:
+            target_col = 'target'
+            logger.info(f"Menggunakan kolom '{target_col}' sebagai target")
+        
+        if target_col not in data.columns:
+            logger.error(f"Kolom target '{target_col}' tidak ditemukan")
             return {'error': 'Kolom target tidak ditemukan'}
             
-        X = data.drop('y', axis=1)
-        y_true = data['y'].map({'yes': 1, 'no': 0})  # Konversi target ke numerik
+        # Pisahkan fitur dan target
+        X = data.drop(target_col, axis=1)
+        
+        # Konversi target ke numerik jika perlu
+        y_true = data[target_col]
+        if target_col == 'y' and y_true.dtype == 'object':
+            # Jika target adalah 'y' dan berisi string, konversi yes/no ke 1/0
+            y_true = y_true.map({'yes': 1, 'no': 0})
+            logger.info("Mengonversi nilai 'yes'/'no' pada kolom target ke 1/0")
         
         # Preprocessing data
         X_processed = preprocessor.transform(X)
@@ -405,7 +422,7 @@ def main():
     """
     try:
         # Set parameter
-        data_path = 'data/bank.csv'  # Path ke data yang akan dimonitor
+        data_path = 'data/test_data.csv'  # Path ke data yang akan dimonitor
         
         # Jalankan monitoring data drift
         logger.info("Menjalankan monitoring pergeseran data...")

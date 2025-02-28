@@ -1,0 +1,5 @@
+age,job,marital,education,balance,housing,loan,y
+30,admin,married,primary,1000,yes,no,no
+35,blue-collar,single,secondary,2000,no,no,yes
+40,entrepreneur,married,tertiary,3000,yes,yes,no
+45,admin,divorced,secondary,4000,no,yes,yes
