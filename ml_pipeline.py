@@ -2,7 +2,9 @@ import os
 import pandas as pd
 import numpy as np
 from sklearn.model_selection import train_test_split
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, OneHotEncoder
+from sklearn.compose import ColumnTransformer
+from sklearn.pipeline import Pipeline
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score
 import joblib
@@ -11,6 +13,7 @@ import mlflow.sklearn
 import matplotlib.pyplot as plt
 import logging
 from datetime import datetime
+from scipy.sparse import issparse
 
 # Konfigurasi logging
 logging.basicConfig(
@@ -106,47 +109,78 @@ def load_data(filepath='data/bank.csv'):
         raise
 
 # Fungsi untuk preprocessing data
-def preprocess_data(df):
+def preprocess_data(df, test_size=0.2, random_state=42):
     """
-    Melakukan preprocessing pada data dan membagi menjadi train dan test set
+    Melakukan preprocessing pada data
+    
+    Parameters:
+    -----------
+    df : pandas.DataFrame
+        Data yang akan diproses
+    test_size : float, default=0.2
+        Ukuran data test relatif terhadap keseluruhan dataset
+    random_state : int, default=42
+        Random seed untuk reproducibility
+        
+    Returns:
+    --------
+    X_train, X_test, y_train, y_test : numpy arrays
+        Data yang sudah di-split untuk training dan testing
     """
     try:
-        logger.info("Melakukan preprocessing data...")
+        logger.info("Memulai preprocessing data...")
         
-        # Verifikasi kolom target
-        target_col = 'target'
-        if target_col not in df.columns and 'y' in df.columns:
-            target_col = 'y'
-            logger.info("Menggunakan kolom 'y' sebagai target")
+        # Cek jika data kosong
+        if df.empty:
+            raise ValueError("DataFrame kosong")
         
-        if target_col not in df.columns:
-            raise ValueError(f"Kolom target '{target_col}' tidak ditemukan dalam dataset")
+        # Pisahkan fitur dan target
+        X = df.drop('y', axis=1)  # Asumsikan target adalah kolom 'y'
+        y = df['y'].map({'yes': 1, 'no': 0})  # Konversi target ke numerik
         
-        # Memisahkan features dan target
-        X = df.drop(target_col, axis=1)
-        y = df[target_col]
+        logger.info(f"Jumlah fitur: {X.shape[1]}")
+        logger.info(f"Distribusi target: {y.value_counts().to_dict()}")
         
-        # Standarisasi fitur (skip jika semua kolom adalah kategorikal)
-        numeric_features = X.select_dtypes(include=['int64', 'float64']).columns
-        if len(numeric_features) > 0:
-            from sklearn.preprocessing import StandardScaler
-            scaler = StandardScaler()
-            X[numeric_features] = scaler.fit_transform(X[numeric_features])
-            
-            # Simpan scaler
-            if not os.path.exists('models'):
-                os.makedirs('models')
-            joblib.dump(scaler, 'models/scaler.pkl')
-            logger.info("Scaler disimpan ke models/scaler.pkl")
+        # Identifikasi kolom numerik dan kategorikal
+        numerical_cols = X.select_dtypes(include=['int64', 'float64']).columns.tolist()
+        categorical_cols = X.select_dtypes(include=['object', 'category']).columns.tolist()
+        
+        logger.info(f"Kolom numerik: {numerical_cols}")
+        logger.info(f"Kolom kategorikal: {categorical_cols}")
+        
+        # Buat preprocessor menggunakan ColumnTransformer
+        preprocessor = ColumnTransformer(
+            transformers=[
+                ('num', StandardScaler(), numerical_cols),
+                ('cat', OneHotEncoder(handle_unknown='ignore'), categorical_cols)
+            ],
+            remainder='passthrough'  # Sisa kolom akan dilewatkan apa adanya
+        )
         
         # Split data
-        from sklearn.model_selection import train_test_split
-        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+        X_train, X_test, y_train, y_test = train_test_split(
+            X, y, test_size=test_size, random_state=random_state, stratify=y
+        )
         
-        logger.info(f"Data dibagi menjadi: X_train {X_train.shape}, X_test {X_test.shape}")
-        return X_train, X_test, y_train, y_test
+        # Fit dan transform data
+        logger.info("Menerapkan transformasi pada data...")
+        X_train_processed = preprocessor.fit_transform(X_train)
+        X_test_processed = preprocessor.transform(X_test)
+        
+        # Simpan preprocessor untuk digunakan nanti
+        if not os.path.exists('models'):
+            os.makedirs('models')
+        joblib.dump(preprocessor, 'models/preprocessor.pkl')
+        
+        # Log informasi
+        logger.info(f"Ukuran X_train: {X_train_processed.shape}")
+        logger.info(f"Ukuran X_test: {X_test_processed.shape}")
+        logger.info("Preprocessing data selesai")
+        
+        return X_train_processed, X_test_processed, y_train, y_test
+    
     except Exception as e:
-        logger.error(f"Error preprocessing data: {str(e)}")
+        logger.error(f"Error dalam preprocessing data: {str(e)}")
         raise
 
 # Fungsi untuk melatih model
@@ -157,27 +191,29 @@ def train_model(X_train, y_train, model_type='random_forest'):
     try:
         logger.info(f"Melatih model {model_type}...")
         
+        # Konversi X_train ke array jika dalam format sparse matrix
+        if issparse(X_train):
+            logger.info("Input data dalam format sparse matrix")
+        
+        # Pilih model berdasarkan tipe
         if model_type == 'random_forest':
             from sklearn.ensemble import RandomForestClassifier
             model = RandomForestClassifier(n_estimators=100, random_state=42)
         elif model_type == 'gradient_boosting':
             from sklearn.ensemble import GradientBoostingClassifier
             model = GradientBoostingClassifier(random_state=42)
+        elif model_type == 'logistic_regression':
+            from sklearn.linear_model import LogisticRegression
+            model = LogisticRegression(random_state=42, max_iter=1000)
         else:
             logger.warning(f"Tipe model '{model_type}' tidak dikenal. Menggunakan RandomForest sebagai default.")
             from sklearn.ensemble import RandomForestClassifier
             model = RandomForestClassifier(n_estimators=100, random_state=42)
         
-        # Standarisasi data jika belum dilakukan
-        if isinstance(X_train, pd.DataFrame):
-            # Fitur sudah distandarisasi di preprocess_data
-            X_train_data = X_train
-        else:
-            # Jika X_train bukan DataFrame, gunakan apa adanya
-            X_train_data = X_train
-        
         # Latih model
-        model.fit(X_train_data, y_train)
+        logger.info("Mulai pelatihan model...")
+        model.fit(X_train, y_train)
+        logger.info("Pelatihan model selesai")
         
         # Simpan model
         if not os.path.exists('models'):
@@ -198,16 +234,12 @@ def evaluate_model(model, X_test, y_test):
     try:
         logger.info("Evaluasi model...")
         
-        # Standarisasi data jika belum dilakukan
-        if isinstance(X_test, pd.DataFrame):
-            # Fitur sudah distandarisasi di preprocess_data
-            X_test_data = X_test
-        else:
-            # Jika X_test bukan DataFrame, gunakan apa adanya
-            X_test_data = X_test
+        # Konversi X_test ke array jika dalam format sparse matrix
+        if issparse(X_test):
+            logger.info("Data test dalam format sparse matrix")
         
         # Prediksi
-        y_pred = model.predict(X_test_data)
+        y_pred = model.predict(X_test)
         
         # Evaluasi metrik
         from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, confusion_matrix
@@ -230,15 +262,17 @@ def evaluate_model(model, X_test, y_test):
         # Plot feature importance (jika model mendukung)
         if hasattr(model, 'feature_importances_'):
             plt.figure(figsize=(10, 6))
-            if isinstance(X_test, pd.DataFrame):
-                features = X_test.columns
-            else:
-                features = [f"feature_{i}" for i in range(X_test.shape[1])]
             
-            importances = pd.Series(model.feature_importances_, index=features)
-            importances = importances.sort_values(ascending=False)
-            importances.plot(kind='bar')
-            plt.title('Feature Importances')
+            # Feature importance
+            importances = model.feature_importances_
+            indices = np.argsort(importances)[::-1]
+            
+            # Plot feature importance untuk 20 fitur teratas (atau semua jika < 20)
+            n_features = min(20, len(importances))
+            plt.bar(range(n_features), importances[indices[:n_features]])
+            plt.title('Feature Importances (Top 20)')
+            plt.xlabel('Feature Index')
+            plt.ylabel('Importance')
             plt.tight_layout()
             plt.savefig('reports/feature_importance.png')
             logger.info("Feature importance plot disimpan ke reports/feature_importance.png")
@@ -274,6 +308,11 @@ def run_pipeline(data_path='data/bank.csv', model_type='random_forest'):
     """
     try:
         logger.info("Memulai pipeline ML...")
+        
+        # Buat direktori yang diperlukan
+        for dir_name in ['data', 'models', 'reports']:
+            if not os.path.exists(dir_name):
+                os.makedirs(dir_name)
         
         # 1. Load Data
         logger.info("1. Memuat data...")

@@ -18,6 +18,9 @@ pipeline {
                 // Periksa Docker
                 bat 'docker --version'
                 
+                // Dapatkan direktori kerja absolut
+                bat 'echo %CD%'
+                
                 // Periksa struktur direktori
                 bat 'dir'
                 
@@ -40,6 +43,10 @@ pipeline {
                 bat '''
                     docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python -m pytest test_pipeline.py -v"
                 '''
+                // Alternatif jika mengalami masalah dengan %CD%
+                // bat '''
+                //     docker run --rm -v "D:/AutoML/Jenkins_Automation:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python -m pytest test_pipeline.py -v"
+                // '''
             }
             post {
                 always {
@@ -59,6 +66,10 @@ pipeline {
                 bat '''
                     docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python ml_pipeline.py"
                 '''
+                // Alternatif jika mengalami masalah dengan %CD%
+                // bat '''
+                //     docker run --rm -v "D:/AutoML/Jenkins_Automation:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python ml_pipeline.py"
+                // '''
             }
             post {
                 success {
@@ -78,11 +89,15 @@ pipeline {
                 bat '''
                     docker run --rm -v "%CD%:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python model_monitoring.py"
                 '''
+                // Alternatif jika mengalami masalah dengan %CD%
+                // bat '''
+                //     docker run --rm -v "D:/AutoML/Jenkins_Automation:/app" -w /app python:3.10 bash -c "pip install -r requirements.txt && python model_monitoring.py"
+                // '''
             }
             post {
                 success {
                     // Arsipkan laporan monitoring
-                    archiveArtifacts artifacts: 'reports/*.png, reports/*.csv, reports/ALERT_*.txt', fingerprint: true, allowEmptyArchive: true
+                    archiveArtifacts artifacts: 'reports/*.png, reports/*.csv, reports/ALERT_*.txt, reports/*.json', fingerprint: true, allowEmptyArchive: true
                 }
             }
         }
