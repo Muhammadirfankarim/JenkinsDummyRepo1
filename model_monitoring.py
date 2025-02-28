@@ -418,24 +418,30 @@ def monitor_model_performance(data_path, model_path='models/model.pkl', preproce
 
 def main():
     """
-    Fungsi utama untuk menjalankan monitoring
+    Fungsi utama untuk menjalankan tugas monitoring
     """
     try:
-        # Set parameter
-        data_path = 'data/test_data.csv'  # Path ke data yang akan dimonitor
+        data_path = 'data/test_data.csv'
+        logging.info(f"Menjalankan monitoring model dengan data dari {data_path}")
         
-        # Jalankan monitoring data drift
-        logger.info("Menjalankan monitoring pergeseran data...")
-        drift_metrics = monitor_data_drift(data_path)
+        # Periksa apakah model dan data tersedia
+        if not os.path.exists('models/model.pkl'):
+            logging.error("Model tidak ditemukan di models/model.pkl. Harap jalankan ml_pipeline.py terlebih dahulu")
+            return
+            
+        if not os.path.exists(data_path):
+            logging.error(f"Data tidak ditemukan di {data_path}")
+            return
         
-        # Jalankan monitoring performa model
-        logger.info("Menjalankan monitoring performa model...")
-        performance_metrics = monitor_model_performance(data_path)
+        # Lakukan monitoring data drift
+        run_data_drift_detection(data_path)
         
-        logger.info("Monitoring selesai")
+        # Lakukan monitoring model performance
+        run_model_performance_monitoring(data_path)
         
+        logging.info("Monitoring selesai")
     except Exception as e:
-        logger.error(f"Error dalam monitoring: {str(e)}")
+        logging.error(f"Error dalam monitoring: {e}")
 
 if __name__ == "__main__":
     main() 
